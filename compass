@@ -1,0 +1,64 @@
+#!/bin/bash
+export CLICOLOR_FORCE=1
+clear
+
+# Set date
+DATE=$(date '+%d/%m/%Y - %I:%M %p')
+while getopts d: flag
+do
+  case "${flag}" in
+    d) DATE=$(date '+%d/%m/%Y - %I:%M %p' -d "${OPTARG}")
+  esac
+done
+
+# Get Username and Password
+if test -f ~/.config/compass-tui/compass-tui.conf; then
+  source ~/.config/compass-tui/compass-tui.conf
+else
+  USER=$(gum input --placeholder "Username")
+  PASS=$(gum input --placeholder "Password" --password)
+fi
+
+# Authenticate User with compass API
+if test -f ~/.cache/compass_cookies && test -f ~/.cache/compass_userId; then
+  USER_ID=$(cat ~/.cache/compass_userId)
+else
+  USER_ID=$(gum spin -s points --show-output --title "Authenticating" -- \
+    curl -s --request POST \
+    --url https://mullauna-vic.compass.education/services/admin.svc/AuthenticateUserCredentials \
+    --header 'Content-Type: application/json' \
+    --data '{"username":"'"$USER"'","password":"'"$PASS"'"}' \
+    -c ~/.cache/compass_cookies \
+    | jq .d.roles[0].userId 2> /dev/null | tee ~/.cache/compass_userId)
+fi
+
+# Error out if Auth Fails
+if test -z "$USER_ID"; then
+  echo "Error: Auth Failed"
+  rm ~/.cache/compass_*
+  exit
+fi
+
+# Get classes from compass API
+CLASS_DATA_STRING=$(printf '{"userId":%s,"date":"%s"}' "$USER_ID" "$DATE")
+CLASSES=$(gum spin -s points --show-output --title "Fetching Classes" -- \
+  curl -s --request POST \
+	--url https://mullauna-vic.compass.education/Services/mobile.svc/GetScheduleLinesForDate \
+	--header 'Content-Type: application/json' \
+	--data "$CLASS_DATA_STRING"\
+	-b ~/.cache/compass_cookies \
+  | jq .d.data[].topAndBottomLine 2> /dev/null)
+
+# Error out if Fetch Fails
+if test -z "$CLASSES"; then
+  echo "Error: Fetch Failed"
+  rm ~/.cache/compass_*
+  exit
+fi
+
+# Remove quotation marks and sort classes by period
+SORTED=$(echo "$CLASSES" | sed -e 's/^"//' -e 's/"$//' | sort -t '-' -k 2n)
+
+# Print classes with gum
+echo "$SORTED" | gum choose --header "Classes for $DATE" > /dev/null
+
