@@ -2,6 +2,15 @@
 export CLICOLOR_FORCE=1
 clear
 
+# Set date
+DATE=$(date '+%d/%m/%Y - %I:%M %p')
+while getopts d: flag
+do
+  case "${flag}" in
+    d) DATE=$(date '+%d/%m/%Y - %I:%M %p' -d "${OPTARG}")
+  esac
+done
+
 # Get Username and Password
 if test -f ~/.config/compass-tui/compass-tui.conf; then
   source ~/.config/compass-tui/compass-tui.conf
@@ -31,7 +40,6 @@ if test -z "$USER_ID"; then
 fi
 
 # Get classes from compass API
-DATE=$(date '+%d/%m/%Y - %I:%M %p')
 CLASS_DATA_STRING=$(printf '{"userId":%s,"date":"%s"}' "$USER_ID" "$DATE")
 CLASSES=$(gum spin -s points --show-output --title "Fetching Classes" -- \
   curl -s --request POST \
@@ -52,4 +60,5 @@ fi
 SORTED=$(echo "$CLASSES" | sed -e 's/^"//' -e 's/"$//' | sort -t '-' -k 2n)
 
 # Print classes with gum
-echo "$SORTED" | gum choose --header "Classes for $(date '+%b %d (%a)')" > /dev/null
+echo "$SORTED" | gum choose --header "Classes for $DATE" > /dev/null
+
